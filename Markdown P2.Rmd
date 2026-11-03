@@ -1,0 +1,218 @@
+---
+output:
+  pdf_document:
+    toc: false
+    number_sections: false
+geometry: "left=1.8cm,right=1.8cm,top=1.5cm,bottom=1.5cm"
+documentclass: article
+header-includes:
+  - \usepackage[spanish,es-tabla]{babel}
+  - \usepackage{graphicx}
+  - \usepackage{float}
+  - \usepackage{caption}
+  - \pagestyle{empty}
+  - \setlength{\parskip}{3pt}
+---
+
+```{r setup, include=FALSE}
+# Configuración global de los chunks de código
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  fig.width = 6.5,
+  fig.height = 2.5,
+  out.width = "85%",
+  fig.pos = "H"
+)
+```
+
+```{r, include=FALSE}
+```
+
+# Pregunta 2 - Prueba Técnica CoMov - Economista Junior
+## Pablo Herrera Gálvez
+
+**TAREA 1.** 
+
+Según datos del Banco Central, la región de Valparaíso muestra un fuerte aumento del sector Servicios. Desde la pandemia ha aumentado sostenidamente alcanzando niveles superiores a lo observado previo a 2020.
+
+```{r datos_bc, include=FALSE}
+
+library(readr)
+library(dplyr)
+library(srvyr)
+library(knitr)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+
+# Gráfico Banco Central
+
+pib_regional <- read_excel("datos/CCNN2018_PIB_V_ACT_T.xlsx", sheet = "Cuadro", skip = 2) %>% janitor::clean_names()
+
+pib_regional$periodo <- as.integer(substr(pib_regional$periodo, 1, 4))
+
+```
+
+```{r grafico_pib, echo=FALSE, fig.height=3, out.width="90%"}
+pib_regional |>
+  select(-x1_produccion_de_bienes) |>
+  pivot_longer(
+    cols = -periodo,
+    names_to = "sector",
+    values_to = "pib_valor"
+  ) |>
+  mutate(
+    sector = recode(
+      sector,
+      "x1_1_mineria" = "Minería",
+      "x1_2_industria" = "Industria",
+      "x1_3_resto_de_bienes" = "Resto de bienes",
+      "x2_comercio" = "Comercio",
+      "x3_servicios" = "Servicios"
+    )
+  ) |>
+  ggplot(aes(x = periodo, y = pib_valor, group = sector, color = sector)) +
+  geom_line(linewidth = 0.9, alpha = 0.8) +
+  geom_point(size = 1.8) +
+  labs(
+    title = "Evolución del PIB Regional por Sector Económico",
+    subtitle = "Región de Valparaíso",
+    x = "Año",
+    y = "PIB (miles de millones CLP)",
+    color = "Sector Económico"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "right",
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 9, face = "bold"),
+    plot.title = element_text(face = "bold", size = 12)
+  ) +
+  scale_y_continuous(
+    labels = scales::number_format(big.mark = ".", decimal.mark = ",")
+  ) +
+  scale_x_continuous(
+    breaks = scales::pretty_breaks(),
+    labels = scales::number_format(accuracy = 1)
+  )
+
+```
+
+Dentro del sector servicios, y con datos de la Encuesta Nacional de Empleo, para agosto de 2026, las áreas "Administración pública y defensa", "Enseñanza", "Atención de la salud humana y asistencia social" cubren cada una más del 10% del total de mujeres empleadas en la región.
+```{r tabla_ene, echo=FALSE}
+# Importar bases de datos.
+ene_0826 <- read_csv2("datos/ene-2026-08-jas.csv")
+
+# Definición global para el tratamiento de estratos con una sola PSU (lonely PSUs)
+options(survey.lonely.psu = "certainty")
+
+# Diseños muestrales
+ene_diseno26 <- ene_0826 |>
+  as_survey_design(ids = conglomerado, strata = estrato, weights = fact_cal, nest = TRUE)
+
+# Filtros diseños muestrales (Valparaíso, Mujeres, >= 15 años)
+f_ene_diseno26 <- ene_diseno26 |> filter(region == 5, sexo == 2, edad >= 15)
+
+#########################################################
+
+# Vector con las etiquetas oficiales de las secciones CAENES (Anexo 5 ENE)
+etiquetas_caenes <- c(
+  "A. Agricultura, ganadería, silvicultura y pesca",
+  "B. Explotación de minas y canteras",
+  "C. Industrias manufactureras",
+  "D. Suministro de electricidad y gas",
+  "E. Suministro de agua y gestión de desechos",
+  "F. Construcción",
+  "G. Comercio y reparación de vehículos",
+  "H. Transporte y almacenamiento",
+  "I. Alojamiento y servicio de comidas",
+  "J. Información y comunicaciones",
+  "K. Actividades financieras y de seguros",
+  "L. Actividades inmobiliarias",
+  "M. Actividades profesionales, científicas y técnicas",
+  "N. Servicios administrativos y de apoyo",
+  "O. Administración pública y defensa",
+  "P. Enseñanza",
+  "Q. Atención de la salud humana y asistencia social",
+  "R. Actividades artísticas y recreativas",
+  "S. Otras actividades de servicios",
+  "T. Actividades de los hogares como empleadores",
+  "U. Actividades de organizaciones extraterritoriales"
+)
+
+# 2. Estimación para Agosto 2026 (Solo proporción sin se/cv)
+t26 <- f_ene_diseno26 |>
+  filter(cae_especifico %in% 1:7, r_p_rev4cl_caenes %in% 1:21) |>
+  mutate(rama_nombre = factor(r_p_rev4cl_caenes, levels = 1:21, labels = etiquetas_caenes)) |>
+  group_by(rama_nombre) |>
+  summarise(prop_empleo = survey_mean() * 100) |>
+  mutate(prop_2026 = format(round(prop_empleo, 2), decimal.mark = ",", nsmall = 2)) |>
+  select(rama_nombre, prop_2026)
+
+# Presentación en Tabla Tabular con kable
+
+t26_servicios <- t26 |>
+  filter(rama_nombre %in% c(
+  "O. Administración pública y defensa",
+  "P. Enseñanza",
+  "Q. Atención de la salud humana y asistencia social",
+  "I. Alojamiento y servicio de comidas",
+  "N. Servicios administrativos y de apoyo",
+  "T. Actividades de los hogares como empleadores"
+  ))
+```
+
+```{r grafico_servicios, echo=FALSE, fig.height=3, out.width="95%"}
+t26_servicios |>
+  # Aseguramos que la proporción sea numérica para graficar correctamente
+  mutate(
+    prop_num = as.numeric(gsub(",", ".", prop_2026))
+  ) |>
+  # Graficamos ordenando de mayor a menor mediante reorder()
+  ggplot(aes(x = prop_num, y = reorder(rama_nombre, prop_num))) +
+  geom_col(fill = "#2b5c8f", width = 0.7) +
+  geom_text(
+    aes(label = paste0(format(round(prop_num, 1), decimal.mark = ","), "%")),
+    hjust = -0.15,
+    size = 2.8
+  ) +
+  labs(
+    title = "Participación del Empleo Femenino (Servicios)",
+    subtitle = "Región de Valparaíso - Agosto 2026",
+    x = "Participación (%)",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 9) +
+  theme(
+    plot.title = element_text(face = "bold", size = 10),
+    plot.subtitle = element_text(size = 8),
+    axis.text.y = element_text(size = 7),
+    panel.grid.major.y = element_blank(), # Limpia líneas horizontales para mejor lectura
+    panel.grid.minor = element_blank()
+  ) +
+  scale_x_continuous(
+    expand = expansion(mult = c(0, 0.18)) # Deja espacio a la derecha para las etiquetas de %
+  )
+
+```
+
+**TAREA 2.**
+
+Sumado a lo expuesto en la Tarea 1, según las Estadísticas de Empresas por Región y Rubro económico del Servicio de Impuestos Internos, el sector "Enseñanza" y "Actividades de atención de la salud humana y de asistencia social" presentan una participación femenina del 70 y 74 por ciento.
+
+Por lo tanto, ambos sectores son buenos candidatos para incorporar la mayor oferta laboral femenina en la región.
+
+\newpage
+
+**BITÁCORA DE IA.**
+
+Para el desarrollo de este reporte, se utilizaron las siguientes herramientas de Inteligencia Artificial.
+
+* **Google Notebook LM** para una revisión inicial del Libro de Códigos de la Encuesta Nacional de Empleo (ENE). Entre otras cosas se utilizó para identificar las variables relevantes de la base de datos, así como también la estructura del diseño muestral complejo de la encuesta (como los factores de expansión). Al igual que en la Pregunta 1.
+
+* **Visual Studio Code** para edición de código. Este análisis fue realizado utilizando R inicialmente y R Markdown para el reporte final. Ambos trabajos fueron realizados en el entorno de VS Code, lo cual incluye uso de la Extensión Continue para autocompletado de código, revisión de sintaxis, formato del documento generado con R Markdown, así como también para estructurar los hallazgos en algunas respuestas.
+
+* **Google Gemini** también fue consultado para una primera exploración de las distintas fuentes de información adicionales. Como conclusión se decidió trabajar con los datos del Banco Central y del Servicio de Impuestos Internos.

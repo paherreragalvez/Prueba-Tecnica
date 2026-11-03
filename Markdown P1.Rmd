@@ -1,0 +1,367 @@
+---
+output: 
+  pdf_document:
+    toc: false
+geometry: "left=1.5cm,right=1.5cm,top=1cm,bottom=1cm"
+header-includes:
+  - \usepackage[spanish,es-tabla]{babel}
+  - \pagestyle{empty}
+
+---
+
+```{r setup, include=FALSE}
+# Configuración global de los chunks de código
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+# Carga de librerías esenciales
+library(readr)
+library(dplyr)
+library(srvyr)
+library(knitr)
+```
+
+```{r data_survey, include=FALSE}
+# Importar bases de datos.
+
+ene_0825 <- read_csv2("datos/ene-2025-08-jas.csv")
+ene_0826 <- read_csv2("datos/ene-2026-08-jas.csv")
+
+# Definición global para el tratamiento de estratos con una sola PSU (lonely PSUs)
+options(survey.lonely.psu = "certainty")
+
+# Diseños muestrales
+ene_diseno25 <- ene_0825 |>
+  as_survey_design(
+    ids = conglomerado,
+    strata = estrato,
+    weights = fact_cal,
+    nest = TRUE)
+
+ene_diseno26 <- ene_0826 |>
+  as_survey_design(
+    ids = conglomerado,
+    strata = estrato,
+    weights = fact_cal,
+    nest = TRUE)
+
+# Filtros diseños muestrales
+
+f_ene_diseno25 <- ene_diseno25 |> filter(
+  region == 5,
+  sexo == 2,
+  edad >= 15)
+
+f_ene_diseno26 <- ene_diseno26 |> filter(
+  region == 5,
+  sexo == 2,
+  edad >= 15)
+
+```
+
+# Pregunta 1 - Prueba Técnica CoMov - Economista Junior
+## Pablo Herrera Gálvez
+
+**TAREA 1.** Este reporte utiliza datos de la Encuesta Nacional de Empleo, trimestre móvil de agosto 2025 y 2026.
+
+```{r t1_tasas, include=FALSE}
+
+# a.	la tasa de desocupación
+
+td_25 <- f_ene_diseno25 |> summarise(
+  tasa_desocupacion = survey_ratio(
+    numerator = cae_especifico %in% 8:9,  # Desocupadas (Cesantes + BTPV)
+    denominator = cae_especifico %in% 1:9, # Fuerza de Trabajo femenina
+    vartype = c("se", "cv"),
+    na.rm = TRUE
+    ) * 100
+    )
+
+td_26 <- f_ene_diseno26 |> summarise(
+  tasa_desocupacion = survey_ratio(
+    numerator = cae_especifico %in% 8:9,  # Desocupadas (Cesantes + BTPV)
+    denominator = cae_especifico %in% 1:9, # Fuerza de Trabajo femenina
+    vartype = c("se", "cv"),
+    na.rm = TRUE
+    ) * 100
+    )
+
+# b.	la tasa de participación,
+
+tp_25 <- f_ene_diseno25 |>
+  summarise(
+    tasa_participacion = survey_ratio(
+      numerator = cae_especifico %in% 1:9,   # Fuerza de Trabajo (FT)
+      denominator = TRUE,                    # PET (edad >= 15 ya filtrada)
+      vartype = c("se", "cv"),
+      na.rm = TRUE
+    ) * 100
+  )
+
+tp_26 <- f_ene_diseno26 |>
+  summarise(
+    tasa_participacion = survey_ratio(
+      numerator = cae_especifico %in% 1:9,   # Fuerza de Trabajo (FT)
+      denominator = TRUE,                    # PET (edad >= 15 ya filtrada)
+      vartype = c("se", "cv"),
+      na.rm = TRUE
+    ) * 100
+  )
+
+# c.	la tasa de ocupación y
+
+to_25 <- f_ene_diseno25 |>
+  summarise(
+    tasa_ocupacion = survey_ratio(
+      numerator = cae_especifico %in% 1:7,   # Ocupados (O)
+      denominator = TRUE,                    # PET (edad >= 15 ya filtrada)
+      vartype = c("se", "cv"),
+      na.rm = TRUE
+    ) * 100
+  )
+
+to_26 <- f_ene_diseno26 |>
+  summarise(
+    tasa_ocupacion = survey_ratio(
+      numerator = cae_especifico %in% 1:7,   # Ocupados (O)
+      denominator = TRUE,                    # PET (edad >= 15 ya filtrada)
+      vartype = c("se", "cv"),
+      na.rm = TRUE
+    ) * 100
+  )
+
+# d.	la tasa de ocupación informal.
+
+toi_25 <- f_ene_diseno25 |>
+  # Se acota la subpoblación únicamente a los Ocupados
+  filter(cae_especifico %in% 1:7) |>
+  summarise(
+    tasa_ocupacion_informal = survey_ratio(
+      numerator = ocup_form == 2,            # Ocupados Informales (OI)
+      denominator = TRUE,                    # Total de Ocupados
+      vartype = c("se", "cv"),
+      na.rm = TRUE
+    ) * 100
+  )
+
+toi_26 <- f_ene_diseno26 |>
+  # Se acota la subpoblación únicamente a los Ocupados
+  filter(cae_especifico %in% 1:7) |>
+  summarise(
+    tasa_ocupacion_informal = survey_ratio(
+      numerator = ocup_form == 2,            # Ocupados Informales (OI)
+      denominator = TRUE,                    # Total de Ocupados
+      vartype = c("se", "cv"),
+      na.rm = TRUE
+    ) * 100
+  )
+
+```
+
+```{r t1_tabla_resumen, echo=FALSE}
+# Creamos un data frame uniendo los resultados con kable()
+tabla_tasas <- data.frame(
+  Indicador = c(
+    "Tasa de Desocupación (%)",
+    "Tasa de Participación (%)",
+    "Tasa de Ocupación (%)",
+    "Tasa de Ocupación Informal (%)"
+  ),
+  `Ago-2025` = c(
+    format(round(td_25$tasa_desocupacion, 1), decimal.mark = ","),
+    format(round(tp_25$tasa_participacion, 1), decimal.mark = ","),
+    format(round(to_25$tasa_ocupacion, 1), decimal.mark = ","),
+    format(round(toi_25$tasa_ocupacion_informal, 1), decimal.mark = ",")
+  ),
+  `Ago-2026` = c(
+    format(round(td_26$tasa_desocupacion, 1), decimal.mark = ","),
+    format(round(tp_26$tasa_participacion, 1), decimal.mark = ","),
+    format(round(to_26$tasa_ocupacion, 1), decimal.mark = ","),
+    format(round(toi_26$tasa_ocupacion_informal, 1), decimal.mark = ",")
+  )
+)
+
+# Aquí le asignas los nombres exactos con espacios y paréntesis que tú quieras:
+colnames(tabla_tasas) <- c("Indicador", "Ago-2025", "Ago-2026")
+
+kable(
+  tabla_tasas, 
+  caption = "Indicadores del Mercado Laboral Femenino - Región de Valparaíso (Trimestre Móvil Agosto)",
+  align = c("l", "c", "c")
+)
+```
+
+```{r t2_variaciones, echo=FALSE}
+
+# Cálculo Fuerza de Trabajo (FT) femenina
+
+ft25 <- f_ene_diseno25 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 1:9))
+
+ft26 <- f_ene_diseno26 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 1:9))
+
+# Cálculo Ocupadas femenina
+
+#
+o25 <- f_ene_diseno25 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 1:7))
+
+o26 <- f_ene_diseno26 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 1:7))
+
+# Cálculo Desocupadas femenina
+
+d25 <- f_ene_diseno25 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 8:9))
+
+d26 <- f_ene_diseno26 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 8:9))
+
+# Cálculo Desocupadas femenina - CESANTES - NO INCLUÍDO EN LA TABLA 2.
+
+dces25 <- f_ene_diseno25 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 8:8))
+
+dces26 <- f_ene_diseno26 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 8:8))
+
+# Cálculo Desocupadas femenina - BUSCAN TRABAJO POR PRIMERA VEZ - NO INCLUÍDO EN LA TABLA 2.
+
+dbtpv25 <- f_ene_diseno25 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 9:9))
+
+dbtpv26 <- f_ene_diseno26 %>%
+  summarise(enroll_tot = survey_total(cae_especifico %in% 9:9))
+
+
+
+```
+
+```{r t2_tabla_resumen, echo=FALSE}
+
+# Creamos un data frame uniendo los resultados con kable()
+tabla_descomposicion_td <- data.frame(
+  Indicador = c(
+    "Fuerza de Trabajo (n)",
+    "Ocupadas (n)",
+    "Desocupadas (n)"
+  ),
+  `Ago-2025` = c(
+    format(round(ft25$enroll_tot), big.mark = "."),
+    format(round(o25$enroll_tot), big.mark = "."),
+    format(round(d25$enroll_tot), big.mark = ".")
+  ),
+  `Ago-2026` = c(
+    format(round(ft26$enroll_tot), big.mark = "."),
+    format(round(o26$enroll_tot), big.mark = "."),
+    format(round(d26$enroll_tot), big.mark = ".")
+  ),
+  `Aumento "(n)"` = c(
+    format(round(ft26$enroll_tot - ft25$enroll_tot), big.mark = "."),
+    format(round(o26$enroll_tot - o25$enroll_tot), big.mark = "."),
+    format(round(d26$enroll_tot - d25$enroll_tot), big.mark = ".")
+  ),
+  `Aumento porcentual` = c(
+    format(round((ft26$enroll_tot - ft25$enroll_tot) / ft25$enroll_tot * 100, 1), decimal.mark = ","),
+    format(round((o26$enroll_tot - o25$enroll_tot) / o25$enroll_tot * 100, 1), decimal.mark = ","),
+    format(round((d26$enroll_tot - d25$enroll_tot) / d25$enroll_tot * 100, 1), decimal.mark = ",")
+  )
+)
+
+# Aquí le asignas los nombres exactos con espacios y paréntesis que tú quieras:
+colnames(tabla_descomposicion_td) <- c("Categoría", "Ago-2025", "Ago-2026", "Variación (n)", "Variación (%)")
+
+kable(
+  tabla_descomposicion_td, 
+  caption = "Evolución Fuerza Laboral, Ocupadas y Desocupadas - Región de Valparaíso (Trimestre Móvil Agosto).",
+  align = c("l", "c", "c", "c", "c")
+)
+```
+
+**TAREA 2.** Considerando que la tasa de desempleo corresponde a la fracción de personas que queriendo tener trabajo (i.e. forman parte de la Fuerza de Trabajo), están desocupadas, la tabla permite extraer lo siguiente:
+
+* **Se observa una expansión del mercado laboral**. La entrada de casi 12 mil mujeres al mercado de la región generó presión al mercado.
+* **El empleo femenino creció**. Poco más de 2 mil de estas mujeres lograron insertarse en el mercado laboral.
+* **Presión al desempleo**. Las restantes 9.601 mujeres desocupadas han contribuido a un aumento del 21,8% del total de mujeres desocupadas en la región.
+* Aunque no se ha incluido en la tabla, es interesante el desglose entre desocupados cesantes y quienes buscan trabajo por primera vez. El primer grupo es el mayoritario y aumentó en unas 10 mil personas, mientras que el segundo cae levemente en unas 700 personas.
+
+**TAREA 3.** Con respecto a si el cambio en la tasa de desocupación es o no estadísticamente distinto de cero, se evaluó mediante una prueba de diferencia de medias para muestras independientes. El estadístico se construyó a partir de la diferencia entre las estimaciones de ambos años, estandarizada por la raíz cuadrada de la suma de sus respectivos errores estándar al cuadrado.
+
+```{r t3_test, echo=FALSE}
+#3.	Indica si el cambio en la tasa de desocupación es estadísticamente distinto de cero y explica cómo lo determinaste.
+
+# Extraer valores y errores estándar
+val_25 <- td_25$tasa_desocupacion
+se_25  <- td_25$tasa_desocupacion_se
+
+val_26 <- td_26$tasa_desocupacion
+se_26  <- td_26$tasa_desocupacion_se
+
+# 1. Calcular la diferencia
+diff_tasa <- val_26 - val_25
+
+# 2. Error estándar de la diferencia
+se_diff <- sqrt(se_25^2 + se_26^2)
+
+# 3. Estadístico t
+t_stat <- diff_tasa / se_diff
+
+# 4. Grados de libertad aproximados o valor p (asumiendo distribución normal estándar para muestras grandes de ENE)
+p_value <- 2 * (1 - pnorm(abs(t_stat)))
+```
+
+```{r t3_tablatest, echo=FALSE}
+
+tabla_diferencia <- tibble(
+  Indicador = "Desocupación",
+  `Tasa 25` = val_25,
+  `SE 25` = se_25,
+  `Tasa 26` = val_26,
+  `SE 26` = se_26,
+  `Diferencia` = diff_tasa,
+  `SE Dif.` = se_diff,
+  `Estadístico t` = t_stat,
+  `P-value` = p_value
+) |> 
+  # Formateo numérico chileno con comas decimales y redondeo
+  mutate(
+    across(
+      c(`Tasa 25`, `SE 25`, `Tasa 26`, `SE 26`, 
+        `Diferencia`, `SE Dif.`, `Estadístico t`),
+      ~ format(round(.x, 2), decimal.mark = ",", nsmall = 2)
+    ),
+    # B. Formato exclusivo a 4 decimales (con coma) para el p-valor
+    `P-value` = format(round(`p_value`, 4), decimal.mark = ",", nsmall = 4)  )
+
+# 2. Renderizar la tabla en Markdown / PDF mediante knitr::kable
+kable(
+  tabla_diferencia,
+  caption = "Prueba de Hipótesis para la Diferencia en la Tasa de Desocupación (2025 vs. 2026)",
+  align = "c"
+)
+```
+
+Utilizando los valores de la tasa de desocupación y su error estándar, disponibles en la tabla anterior, se obtiene un estadístico t menor a 1,96 y un P-value levemente superior a de 0,05. Siguiendo un nivel de confianza al 95% se concluye que las **tasas de desocupación de los trimestres mencionados no son estadísticamente distintas entre sí**.
+
+Sin embargo, cabe mencionar que esta conclusión es muy sensible al nivel de significancia elegido. Bastaría una disminución a un nivel de confianza del 94% para considerar la diferencia como estadísticamente significativa. Por lo anterior, los resultados deben ser interpretados con cautela.
+
+**TAREA 4.** Ante los resultados expuestos, se puede destacar que la mencionada alza de la tasa de desocupación femenina en la región, se debe a una mayor participación laboral. Sin embargo, también es relevante considerar que el aumento observado no es significativo, a un nivel de confianza del 95%.
+
+En segundo lugar, cabe mencionar que el aumento de la fuerza laboral viene explicado por un aumento de mujeres cesantes que ya poseen experiencia laboral. Esto puede sugerir que no es una situación focalizada en la población más joven.
+
+Por último, un insumo útil para un buen diseño de políticas sería conocer en mayor detalle si las mujeres cesantes provienen de sectores económicos específicos, así como también estudiar qué capacidades demanda el mercado laboral de la región.
+
+\newpage
+
+**BITÁCORA DE IA.**
+
+Para el desarrollo de este reporte, se utilizaron las siguientes herramientas de Inteligencia Artificial.
+
+* **Google Notebook LM** para una revisión inicial del Libro de Códigos de la Encuesta Nacional de Empleo (ENE). Entre otras cosas se utilizó para identificar las variables relevantes de la base de datos, así como también la estructura del diseño muestral complejo de la encuesta (como los factores de expansión).
+
+* **Visual Studio Code** para edición de código. Este análisis fue realizado utilizando R inicialmente y R Markdown para el reporte final. Ambos trabajos fueron realizados en el entorno de VS Code, lo cual incluye uso de la Extensión Continue para autocompletado de código, revisión de sintaxis, formato del documento generado con R Markdown, así como también para estructurar los hallazgos en algunas respuestas.
